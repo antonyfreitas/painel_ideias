@@ -1,22 +1,39 @@
 import { create } from 'zustand'
 
 export interface Sheet {
-  id: string;
-  title: string;
-  content: string;
-  updatedAt: number;
+  id: string
+  title: string
+  content: string
+  createdAt: number
+  updatedAt: number
+}
+
+export interface WindowState {
+  sheetId: string
+  x: number
+  y: number
+  width: number
+  height: number
+  status: 'normal' | 'minimized' | 'maximized'
+  zIndex: number
 }
 
 interface ScratchpadState {
   sheets: Sheet[]
-  activeSheetId: string | null
+  windows: WindowState[]
+  topZ: number
   isSandboxOpen: boolean
   sandboxCode: string
 
-  // Actions
   createSheet: () => void
   deleteSheet: (id: string) => void
-  setActiveSheet: (id: string) => void
+  openWindow: (sheetId: string) => void
+  closeWindow: (sheetId: string) => void
+  minimizeWindow: (sheetId: string) => void
+  restoreWindow: (sheetId: string) => void
+  maximizeWindow: (sheetId: string) => void
+  updateWindowBounds: (sheetId: string, bounds: Partial<Pick<WindowState, 'x' | 'y' | 'width' | 'height'>>) => void
+  focusWindow: (sheetId: string) => void
   updateSheetContent: (id: string, content: string) => void
   updateSheetTitle: (id: string, title: string) => void
   openSandbox: (code: string) => void
@@ -25,19 +42,16 @@ interface ScratchpadState {
 
 const generateId = () => `sheet_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
 
-const loadFromStorage = (): Partial<ScratchpadState> => {
+const load = (): Partial<ScratchpadState> => {
   try {
-    const raw = localStorage.getItem('scratchpad_state')
-    if (!raw) return {}
-    return JSON.parse(raw)
-  } catch {
-    return {}
-  }
+    const raw = localStorage.getItem('scratchpad_v2')
+    return raw ? JSON.parse(raw) : {}
+  } catch { return {} }
 }
 
-const saveToStorage = (sheets: Sheet[], activeSheetId: string | null) => {
+const save = (sheets: Sheet[], windows: WindowState[]) => {
   try {
-    localStorage.setItem('scratchpad_state', JSON.stringify({ sheets, activeSheetId }))
+    localStorage.setItem('scratchpad_v2', JSON.stringify({ sheets, windows }))
   } catch {}
 }
 
@@ -49,47 +63,123 @@ const defaultSheet: Sheet = {
   updatedAt: Date.now(),
 }
 
-const persisted = loadFromStorage()
+const makeWindow = (sheetId: string, z: number): WindowState => {
+  const w = Math.min(680, window.innerWidth - 80)
+  const h = Math.min(520, window.innerHeight - 120)
+  const offset = (z % 6) * 28
+  return {
+    sheetId,
+    x: Math.max(24, (window.innerWidth - w) / 2 + offset),
+    y: Math.max(24, (window.innerHeight - h) / 2 + offset - 40),
+    width: w,
+    height: h,
+    status: 'normal',
+    zIndex: z,
+  }
+}
+
+const persisted = load()
+const initSheets: Sheet[] = persisted.sheets?.length ? persisted.sheets : [defaultSheet]
+const initWindows: WindowState[] = persisted.windows?.length
+  ? persisted.windows.map(w => ({ ...w, status: 'normal' as const }))
+  : [makeWindow(initSheets[0].id, 10)]
 
 export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
-  sheets: persisted.sheets?.length ? persisted.sheets : [defaultSheet],
-  activeSheetId: persisted.activeSheetId ?? persisted.sheets?.[0]?.id ?? defaultSheet.id,
+  sheets: initSheets,
+  windows: initWindows,
+  topZ: 10,
   isSandboxOpen: false,
   sandboxCode: '',
 
   createSheet: () => {
-    const newSheet: Sheet = {
+    const sheet: Sheet = {
       id: generateId(),
       title: 'Nova folha',
       content: '',
       createdAt: Date.now(),
       updatedAt: Date.now(),
     }
-    const sheets = [...get().sheets, newSheet]
-    set({ sheets, activeSheetId: newSheet.id })
-    saveToStorage(sheets, newSheet.id)
+    const topZ = get().topZ + 1
+    const win = makeWindow(sheet.id, topZ)
+    const sheets = [...get().sheets, sheet]
+    const windows = [...get().windows, win]
+    set({ sheets, windows, topZ })
+    save(sheets, windows)
   },
 
   deleteSheet: (id) => {
     const sheets = get().sheets.filter(s => s.id !== id)
+    const windows = get().windows.filter(w => w.sheetId !== id)
     if (sheets.length === 0) {
-      const newSheet: Sheet = {
-        id: generateId(),
-        title: 'Nova folha',
-        content: '',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      }
-      sheets.push(newSheet)
+      const sheet = { id: generateId(), title: 'Nova folha', content: '', createdAt: Date.now(), updatedAt: Date.now() }
+      sheets.push(sheet)
+      windows.push(makeWindow(sheet.id, get().topZ + 1))
     }
-    const activeSheetId = get().activeSheetId === id ? sheets[0].id : get().activeSheetId
-    set({ sheets, activeSheetId })
-    saveToStorage(sheets, activeSheetId)
+    set({ sheets, windows })
+    save(sheets, windows)
   },
 
-  setActiveSheet: (id) => {
-    set({ activeSheetId: id })
-    saveToStorage(get().sheets, id)
+  openWindow: (sheetId) => {
+    const existing = get().windows.find(w => w.sheetId === sheetId)
+    if (existing) {
+      get().restoreWindow(sheetId)
+      return
+    }
+    const topZ = get().topZ + 1
+    const win = makeWindow(sheetId, topZ)
+    const windows = [...get().windows, win]
+    set({ windows, topZ })
+    save(get().sheets, windows)
+  },
+
+  closeWindow: (sheetId) => {
+    const windows = get().windows.filter(w => w.sheetId !== sheetId)
+    set({ windows })
+    save(get().sheets, windows)
+  },
+
+  minimizeWindow: (sheetId) => {
+    const windows = get().windows.map(w =>
+      w.sheetId === sheetId ? { ...w, status: 'minimized' as const } : w
+    )
+    set({ windows })
+    save(get().sheets, windows)
+  },
+
+  restoreWindow: (sheetId) => {
+    const topZ = get().topZ + 1
+    const windows = get().windows.map(w =>
+      w.sheetId === sheetId ? { ...w, status: 'normal' as const, zIndex: topZ } : w
+    )
+    set({ windows, topZ })
+    save(get().sheets, windows)
+  },
+
+  maximizeWindow: (sheetId) => {
+    const win = get().windows.find(w => w.sheetId === sheetId)
+    if (!win) return
+    const next = win.status === 'maximized' ? 'normal' : 'maximized'
+    const windows = get().windows.map(w =>
+      w.sheetId === sheetId ? { ...w, status: next as WindowState['status'] } : w
+    )
+    set({ windows })
+    save(get().sheets, windows)
+  },
+
+  updateWindowBounds: (sheetId, bounds) => {
+    const windows = get().windows.map(w =>
+      w.sheetId === sheetId ? { ...w, ...bounds } : w
+    )
+    set({ windows })
+    save(get().sheets, windows)
+  },
+
+  focusWindow: (sheetId) => {
+    const topZ = get().topZ + 1
+    const windows = get().windows.map(w =>
+      w.sheetId === sheetId ? { ...w, zIndex: topZ } : w
+    )
+    set({ windows, topZ })
   },
 
   updateSheetContent: (id, content) => {
@@ -97,7 +187,7 @@ export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
       s.id === id ? { ...s, content, updatedAt: Date.now() } : s
     )
     set({ sheets })
-    saveToStorage(sheets, get().activeSheetId)
+    save(sheets, get().windows)
   },
 
   updateSheetTitle: (id, title) => {
@@ -105,7 +195,7 @@ export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
       s.id === id ? { ...s, title, updatedAt: Date.now() } : s
     )
     set({ sheets })
-    saveToStorage(sheets, get().activeSheetId)
+    save(sheets, get().windows)
   },
 
   openSandbox: (code) => set({ isSandboxOpen: true, sandboxCode: code }),

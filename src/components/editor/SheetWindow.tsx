@@ -1,108 +1,193 @@
+import { useRef, useState } from 'react'
 import { Rnd } from 'react-rnd'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { TipTapEditor } from './TipTapEditor'
 import { useScratchpadStore } from '../../store/scratchpadStore'
-import { Download } from 'lucide-react'
 import { exportSheetToMarkdown } from '../../services/pkmExport'
+import { Download } from 'lucide-react'
 
-export const SheetWindow = () => {
-  const { sheets, activeSheetId } = useScratchpadStore()
-  const activeSheet = sheets.find(s => s.id === activeSheetId)
+interface Props {
+  sheetId: string
+}
 
-  if (!activeSheet) return null
+export const SheetWindow = ({ sheetId }: Props) => {
+  const {
+    sheets, windows,
+    focusWindow, closeWindow, minimizeWindow, maximizeWindow, updateWindowBounds,
+  } = useScratchpadStore()
 
-  const initialW = Math.min(760, window.innerWidth - 48)
-  const initialH = Math.min(560, window.innerHeight - 80)
-  const initialX = Math.max(24, (window.innerWidth - initialW) / 2)
-  const initialY = Math.max(24, (window.innerHeight - initialH) / 2)
+  const sheet = sheets.find(s => s.id === sheetId)
+  const win = windows.find(w => w.sheetId === sheetId)
+  const [isHoveringTraffic, setIsHoveringTraffic] = useState(false)
+  const rndRef = useRef<Rnd>(null)
+  const preMaxBounds = useRef({ x: 100, y: 100, width: 680, height: 520 })
+  const isDraggingFromEditor = useRef(false)
+
+  if (!sheet || !win || win.status === 'minimized') return null
+
+  const isMax = win.status === 'maximized'
+
+  const handleMaximize = () => {
+    if (isMax) {
+      rndRef.current?.updatePosition({ x: preMaxBounds.current.x, y: preMaxBounds.current.y })
+      rndRef.current?.updateSize({ width: preMaxBounds.current.width, height: preMaxBounds.current.height })
+      maximizeWindow(sheetId)
+    } else {
+      preMaxBounds.current = { x: win.x, y: win.y, width: win.width, height: win.height }
+      rndRef.current?.updatePosition({ x: 0, y: 0 })
+      rndRef.current?.updateSize({ width: window.innerWidth, height: window.innerHeight })
+      maximizeWindow(sheetId)
+    }
+  }
 
   return (
     <Rnd
-      default={{
-        x: initialX,
-        y: initialY,
-        width: initialW,
-        height: initialH,
-      }}
+      ref={rndRef}
+      default={{ x: win.x, y: win.y, width: win.width, height: win.height }}
       minWidth={320}
-      minHeight={240}
+      minHeight={44}
       bounds="window"
-      dragHandleClassName="drag-handle"
-      style={{ zIndex: 10 }}
+      disableDragging={isMax || isDraggingFromEditor.current}
+      enableResizing={!isMax}
+      cancel=".no-drag"
+      style={{ zIndex: win.zIndex }}
+      onMouseDown={() => focusWindow(sheetId)}
+      onDragStop={(_e, d) => updateWindowBounds(sheetId, { x: d.x, y: d.y })}
+      onResizeStop={(_e, _dir, ref, _delta, pos) =>
+        updateWindowBounds(sheetId, { x: pos.x, y: pos.y, width: ref.offsetWidth, height: ref.offsetHeight })
+      }
     >
-      <motion.div
-        key={activeSheet.id}
-        initial={{ opacity: 0, scale: 0.97, y: 8 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ duration: 0.2, ease: 'easeOut' }}
-        className="w-full h-full flex flex-col rounded-2xl overflow-hidden"
+      <div
+        className="w-full h-full flex flex-col overflow-hidden"
         style={{
-          background: 'var(--surface)',
-          boxShadow: 'var(--shadow-lg)',
-          backdropFilter: 'blur(12px)',
-          border: '1px solid var(--border)',
+          background: 'rgba(252,251,248,0.96)',
+          boxShadow: isMax ? 'none' : '0 2px 0 0 rgba(0,0,0,0.08), 0 8px 40px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.07)',
+          border: isMax ? 'none' : '1px solid rgba(0,0,0,0.09)',
+          borderRadius: isMax ? '0' : '14px',
+          backdropFilter: 'blur(8px)',
         }}
       >
-        {/* Titlebar */}
+        {/* Titlebar — arrasta aqui */}
         <div
-          className="drag-handle flex items-center gap-2 px-4 py-3 select-none cursor-grab active:cursor-grabbing"
+          className="flex items-center gap-2 px-4 shrink-0"
           style={{
-            borderBottom: '1px solid var(--border)',
-            background: 'var(--surface-hover)',
+            height: '44px',
+            background: 'rgba(248,247,244,0.98)',
+            borderBottom: '1px solid rgba(0,0,0,0.07)',
+            borderRadius: isMax ? '0' : '14px 14px 0 0',
+            cursor: isMax ? 'default' : 'grab',
+            userSelect: 'none',
           }}
         >
-          {/* Traffic lights */}
-          <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-full bg-red-400 opacity-80" />
-            <div className="w-3 h-3 rounded-full bg-yellow-400 opacity-80" />
-            <div className="w-3 h-3 rounded-full bg-green-400 opacity-80" />
+          {/* Traffic Lights — bloqueiam o drag */}
+          <div
+            className="no-drag flex items-center gap-1.5 shrink-0"
+            onMouseEnter={() => setIsHoveringTraffic(true)}
+            onMouseLeave={() => setIsHoveringTraffic(false)}
+          >
+            <motion.button
+              onClick={() => closeWindow(sheetId)}
+              whileTap={{ scale: 0.82 }}
+              className="w-3 h-3 rounded-full flex items-center justify-center relative shrink-0"
+              style={{ background: '#ff5f57', boxShadow: '0 0 0 0.5px rgba(0,0,0,0.14)' }}
+            >
+              <AnimatePresence>
+                {isHoveringTraffic && (
+                  <motion.span
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    transition={{ duration: 0.1 }}
+                    className="absolute text-[7px] font-black leading-none pointer-events-none"
+                    style={{ color: 'rgba(80,0,0,0.55)' }}
+                  >✕</motion.span>
+                )}
+              </AnimatePresence>
+            </motion.button>
+
+            <motion.button
+              onClick={() => minimizeWindow(sheetId)}
+              whileTap={{ scale: 0.82 }}
+              className="w-3 h-3 rounded-full flex items-center justify-center relative shrink-0"
+              style={{ background: '#febc2e', boxShadow: '0 0 0 0.5px rgba(0,0,0,0.14)' }}
+            >
+              <AnimatePresence>
+                {isHoveringTraffic && (
+                  <motion.span
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    transition={{ duration: 0.1 }}
+                    className="absolute text-[9px] font-black leading-none pointer-events-none"
+                    style={{ color: 'rgba(80,40,0,0.5)', marginTop: '-1px' }}
+                  >−</motion.span>
+                )}
+              </AnimatePresence>
+            </motion.button>
+
+            <motion.button
+              onClick={handleMaximize}
+              whileTap={{ scale: 0.82 }}
+              className="w-3 h-3 rounded-full flex items-center justify-center relative shrink-0"
+              style={{ background: '#28c840', boxShadow: '0 0 0 0.5px rgba(0,0,0,0.14)' }}
+            >
+              <AnimatePresence>
+                {isHoveringTraffic && (
+                  <motion.span
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    transition={{ duration: 0.1 }}
+                    className="absolute text-[8px] font-black leading-none pointer-events-none"
+                    style={{ color: 'rgba(0,50,0,0.45)' }}
+                  >⤢</motion.span>
+                )}
+              </AnimatePresence>
+            </motion.button>
           </div>
 
-          {/* Título centralizado */}
+          {/* Título */}
           <span
-            className="flex-1 text-center text-sm truncate"
+            className="flex-1 text-center truncate px-2"
             style={{
               fontFamily: 'Lora, serif',
-              color: 'var(--ink-muted)',
+              color: 'rgba(0,0,0,0.4)',
+              fontSize: '0.8rem',
               letterSpacing: '0.01em',
             }}
           >
-            {activeSheet.title || 'Nova folha'}
+            {sheet.title || 'Nova folha'}
           </span>
 
-          {/* Botão de Exportar - Inserido com segurança na Titlebar */}
+          {/* Exportar — bloqueia drag */}
           <button
-            onClick={() => exportSheetToMarkdown(activeSheet)}
-            onPointerDown={(e) => e.stopPropagation()} // Evita conflito com o drag-and-drop
-            className="p-1.5 text-slate-400 hover:text-indigo-500 hover:bg-black/5 rounded-md transition-all flex items-center gap-1.5 text-xs font-medium cursor-pointer"
-            title="Exportar para Markdown (.md)"
+            onClick={() => exportSheetToMarkdown(sheet)}
+            className="no-drag shrink-0 p-1.5 rounded-md transition-all cursor-pointer hover:bg-black/5"
+            style={{ color: 'rgba(0,0,0,0.3)' }}
+            title="Exportar .md"
           >
-            <Download size={14} />
+            <Download size={13} />
           </button>
 
-          {/* Atalho hint */}
           <span
-            className="text-xs px-2 py-0.5 rounded-md ml-1"
+            className="no-drag shrink-0 px-1.5 py-0.5 rounded-md"
             style={{
               fontFamily: 'JetBrains Mono, monospace',
-              color: 'var(--ink-muted)',
-              background: 'var(--accent-soft)',
-              fontSize: '0.7rem',
+              color: 'rgba(0,0,0,0.25)',
+              background: 'rgba(79,110,247,0.07)',
+              fontSize: '0.65rem',
             }}
           >
-            ⌃↵ sandbox
+            ⌃↵
           </span>
         </div>
 
-        {/* Editor */}
-        <div className="flex-1 overflow-hidden">
+        {/* Editor — bloqueia drag */}
+        <div
+          className="no-drag flex-1 overflow-hidden"
+          onMouseDown={e => e.stopPropagation()}
+        >
           <TipTapEditor
-            key={activeSheet.id}
-            sheetId={activeSheet.id}
-            content={activeSheet.content}
+            key={sheet.id}
+            sheetId={sheet.id}
+            content={sheet.content}
           />
         </div>
-      </motion.div>
+      </div>
     </Rnd>
   )
 }

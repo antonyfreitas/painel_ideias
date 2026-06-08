@@ -5,41 +5,37 @@ const extractCodeBlocks = (html: string): string => {
   const parser = new DOMParser()
   const doc = parser.parseFromString(html, 'text/html')
   const blocks = doc.querySelectorAll('pre code, pre')
-  
-  if (blocks.length === 0) {
-    // Fallback: tenta extrair texto puro
-    return doc.body.innerText || ''
-  }
-
-  return Array.from(blocks)
-    .map(b => b.textContent || '')
-    .join('\n\n')
+  if (blocks.length === 0) return doc.body.innerText || ''
+  return Array.from(blocks).map(b => b.textContent || '').join('\n\n')
 }
 
 export const useKeyboardShortcuts = () => {
-  const { isSandboxOpen, closeSandbox, openSandbox, sheets, activeSheetId } = useScratchpadStore()
+  const store = useScratchpadStore()
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      // Ctrl+Enter → abre sandbox com código da folha ativa
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault()
-        const activeSheet = sheets.find(s => s.id === activeSheetId)
-        if (!activeSheet) return
-        const code = extractCodeBlocks(activeSheet.content)
+        // Pega a janela com maior zIndex (a focada)
+        const { windows, sheets, openSandbox } = useScratchpadStore.getState()
+        const topWin = windows
+          .filter(w => w.status !== 'minimized')
+          .sort((a, b) => b.zIndex - a.zIndex)[0]
+        if (!topWin) return
+        const sheet = sheets.find(s => s.id === topWin.sheetId)
+        if (!sheet) return
+        const code = extractCodeBlocks(sheet.content)
         openSandbox(code)
         return
       }
 
-      // Esc → fecha sandbox
-      if (e.key === 'Escape' && isSandboxOpen) {
+      if (e.key === 'Escape') {
         e.preventDefault()
-        closeSandbox()
-        return
+        useScratchpadStore.getState().closeSandbox()
       }
     }
 
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [isSandboxOpen, sheets, activeSheetId, openSandbox, closeSandbox])
+  }, [store])
 }

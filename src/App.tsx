@@ -1,24 +1,33 @@
+import { AnimatePresence } from 'framer-motion'
 import { GridBackground } from './components/canvas/GridBackground'
 import { SheetWindow } from './components/editor/SheetWindow'
 import { SandboxWidget } from './components/sandbox/SandboxWidget'
-import { SheetManager } from './components/sheets/SheetManager'
+import { Dock } from './components/dock/Dock'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
+import { useScratchpadStore } from './store/scratchpadStore'
 
 function App() {
-  // Inicializa a escuta global dos atalhos de teclado (Ctrl+Enter, Esc)
   useKeyboardShortcuts()
+  const { windows } = useScratchpadStore()
 
   return (
-    <main className="relative w-screen h-screen overflow-hidden text-slate-800">
-      {/* Camada 1: O Background Quadriculado (Z-index 0) */}
+    <main className="relative w-screen h-screen overflow-hidden"
+      style={{ background: '#f7f6f2' }}
+    >
       <GridBackground />
 
-      {/* Camada 2: A Interface Principal */}
-      <SheetManager />
-      <SheetWindow />
+      {/* Janelas das folhas */}
+      <AnimatePresence>
+        {windows.map(win => (
+          <SheetWindow key={win.sheetId} sheetId={win.sheetId} />
+        ))}
+      </AnimatePresence>
 
-      {/* Camada 3: Widgets Flutuantes (Sandbox) */}
+      {/* Sandbox flutuante */}
       <SandboxWidget />
+
+      {/* Dock macOS */}
+      <Dock />
     </main>
   )
 }
