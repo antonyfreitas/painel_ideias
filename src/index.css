@@ -187,3 +187,46 @@ body {
 .prose-custom code {
   @apply bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded-md font-mono text-sm;
 }
+
+/* --- TipTap Code Block Syntax Highlighting (Lowlight) --- */
+.tiptap pre {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  font-family: 'JetBrains Mono', monospace;
+  padding: 1.25rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  overflow-x: auto;
+}
+
+.tiptap pre code {
+  color: inherit;
+  padding: 0;
+  background: none;
+  font-size: 0.85rem;
+}
+
+/* Classes geradas pelo hljs (Highlight.js / Lowlight) */
+.hljs-comment, .hljs-quote { color: #6a9955; font-style: italic; }
+.hljs-variable, .hljs-template-variable, .hljs-attribute, .hljs-tag, .hljs-name, .hljs-regexp, .hljs-link, .hljs-selector-id, .hljs-selector-class { color: #569cd6; }
+.hljs-number, .hljs-meta, .hljs-built_in, .hljs-builtin-name, .hljs-literal, .hljs-type, .hljs-params { color: #b5cea8; }
+.hljs-string, .hljs-symbol, .hljs-bullet { color: #ce9178; }
+.hljs-title, .hljs-section { color: #dcdcaa; }
+.hljs-keyword, .hljs-selector-tag { color: #c586c0; }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 700; }
+
+/* Scrollbar invisível/minimalista para menus */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+}
+.custom-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+}

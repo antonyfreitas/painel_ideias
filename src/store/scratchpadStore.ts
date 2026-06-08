@@ -1,11 +1,10 @@
 import { create } from 'zustand'
 
 export interface Sheet {
-  id: string
-  title: string
-  content: string
-  createdAt: number
-  updatedAt: number
+  id: string;
+  title: string;
+  content: string;
+  updatedAt: number;
 }
 
 interface ScratchpadState {

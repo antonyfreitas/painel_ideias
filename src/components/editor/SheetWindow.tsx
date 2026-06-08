@@ -2,6 +2,8 @@ import { Rnd } from 'react-rnd'
 import { motion } from 'framer-motion'
 import { TipTapEditor } from './TipTapEditor'
 import { useScratchpadStore } from '../../store/scratchpadStore'
+import { Download } from 'lucide-react'
+import { exportSheetToMarkdown } from '../../services/pkmExport'
 
 export const SheetWindow = () => {
   const { sheets, activeSheetId } = useScratchpadStore()
@@ -56,7 +58,7 @@ export const SheetWindow = () => {
             <div className="w-3 h-3 rounded-full bg-green-400 opacity-80" />
           </div>
 
-          {/* Título */}
+          {/* Título centralizado */}
           <span
             className="flex-1 text-center text-sm truncate"
             style={{
@@ -68,9 +70,19 @@ export const SheetWindow = () => {
             {activeSheet.title || 'Nova folha'}
           </span>
 
+          {/* Botão de Exportar - Inserido com segurança na Titlebar */}
+          <button
+            onClick={() => exportSheetToMarkdown(activeSheet)}
+            onPointerDown={(e) => e.stopPropagation()} // Evita conflito com o drag-and-drop
+            className="p-1.5 text-slate-400 hover:text-indigo-500 hover:bg-black/5 rounded-md transition-all flex items-center gap-1.5 text-xs font-medium cursor-pointer"
+            title="Exportar para Markdown (.md)"
+          >
+            <Download size={14} />
+          </button>
+
           {/* Atalho hint */}
           <span
-            className="text-xs px-2 py-0.5 rounded-md"
+            className="text-xs px-2 py-0.5 rounded-md ml-1"
             style={{
               fontFamily: 'JetBrains Mono, monospace',
               color: 'var(--ink-muted)',
