@@ -1,4 +1,3 @@
-import { AnimatePresence } from 'framer-motion'
 import { GridBackground } from './components/canvas/GridBackground'
 import { SheetWindow } from './components/editor/SheetWindow'
 import { SandboxWidget } from './components/sandbox/SandboxWidget'
@@ -11,22 +10,23 @@ function App() {
   const { windows } = useScratchpadStore()
 
   return (
-    <main className="relative w-screen h-screen overflow-hidden"
-      style={{ background: '#f7f6f2' }}
-    >
+    <main className="relative w-screen h-screen overflow-hidden">
       <GridBackground />
 
-      {/* Janelas das folhas */}
-      <AnimatePresence>
-        {windows.map(win => (
-          <SheetWindow key={win.sheetId} sheetId={win.sheetId} />
-        ))}
-      </AnimatePresence>
+      {/*
+        AnimatePresence removido daqui.
+        O SheetWindow gerencia seu próprio AnimatePresence internamente,
+        o que permite o exit animation (genie minimize) funcionar corretamente
+        mesmo quando o componente some do array de windows.
+        
+        Mantemos todos os SheetWindows sempre montados (o isMin está dentro do componente)
+        para preservar o estado do editor TipTap entre minimize/restore.
+      */}
+      {windows.map(win => (
+        <SheetWindow key={win.sheetId} sheetId={win.sheetId} />
+      ))}
 
-      {/* Sandbox flutuante */}
       <SandboxWidget />
-
-      {/* Dock macOS */}
       <Dock />
     </main>
   )

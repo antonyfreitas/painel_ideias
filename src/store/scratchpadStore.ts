@@ -190,6 +190,8 @@ export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
     save(sheets, get().windows)
   },
 
+  
+
   updateSheetTitle: (id, title) => {
     const sheets = get().sheets.map(s =>
       s.id === id ? { ...s, title, updatedAt: Date.now() } : s
