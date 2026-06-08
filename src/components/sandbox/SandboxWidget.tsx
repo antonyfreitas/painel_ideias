@@ -1,29 +1,12 @@
 import { Rnd } from 'react-rnd';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, X, TerminalSquare } from 'lucide-react';
-import { useEffect, useState } from 'react';
-// Importe o seu Zustand store aqui se já o tiver criado, 
-// ex: import { useStore } from '../../store/useStore'
+import { X, TerminalSquare } from 'lucide-react';
+import { useScratchpadStore } from '../../store/scratchpadStore';
 
 export function SandboxWidget() {
-  // Substitua por sua variável real do Zustand (ex: const isSandboxOpen = useStore(state => state.isSandboxOpen))
-  // Para fins de teste imediato, se ainda não tiver o estado global, pode forçar para `true` temporariamente.
-  const isSandboxOpen = true; 
-  
-  const [code, setCode] = useState('');
-
-  // Sempre que o Sandbox for aberto, ele "pesca" o código do editor
-  useEffect(() => {
-    if (isSandboxOpen) {
-      // Captura o primeiro bloco de código gerado pelo TipTap
-      const codeBlock = document.querySelector('.ProseMirror pre code');
-      if (codeBlock) {
-        setCode(codeBlock.textContent || '');
-      } else {
-        setCode('<h1>Nenhum código encontrado na folha.</h1><p>Crie um bloco usando ```html</p>');
-      }
-    }
-  }, [isSandboxOpen]);
+  // Consumimos o estado centralizado do Zustand
+  // Nota: Confirma se no teu scratchpadStore.ts a propriedade que guarda o código se chama 'sandboxCode' ou 'code'
+  const { isSandboxOpen, closeSandbox, sandboxCode } = useScratchpadStore();
 
   return (
     <AnimatePresence>
@@ -56,29 +39,19 @@ export function SandboxWidget() {
               </div>
               <div className="flex items-center gap-3">
                 <button 
-                  className="text-slate-400 hover:text-emerald-400 transition-colors"
-                  title="Atualizar Execução"
-                  onClick={() => {
-                    const block = document.querySelector('.ProseMirror pre code');
-                    if (block) setCode(block.textContent || '');
-                  }}
-                >
-                  <Play size={14} fill="currentColor" />
-                </button>
-                <button 
                   className="text-slate-400 hover:text-rose-400 transition-colors"
-                  // onClick={closeSandbox} // Conecte à sua função do Zustand para fechar
+                  onClick={closeSandbox}
                 >
                   <X size={16} />
                 </button>
               </div>
             </div>
 
-            {/* O Executor de fato */}
+            {/* O Executor Isolado (iframe) */}
             <div className="flex-1 bg-white relative">
               <iframe
                 title="Sandbox"
-                srcDoc={code}
+                srcDoc={sandboxCode || '<h1>Sem código detetado na folha ativa</h1>'}
                 sandbox="allow-scripts"
                 className="w-full h-full border-none bg-white"
               />
@@ -89,4 +62,3 @@ export function SandboxWidget() {
     </AnimatePresence>
   );
 }
-
