@@ -1,14 +1,14 @@
 {
-  "name": "vite-react-typescript-starter",
+  "name": "Painel de Ideias",
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://painel_ideias.antonyfreitas.com.br",
+  "homepage": "https://painel-ideias.antonyfreitas.com.br",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview",
+    "preview": "PainelIdeias",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist"
   },
