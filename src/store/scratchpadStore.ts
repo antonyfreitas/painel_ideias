@@ -45,7 +45,6 @@ interface ScratchpadState {
 const generateId = () => `sheet_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
 
 const STORAGE_KEY = 'scratchpad_v2'
-const STORAGE_VERSION = 2
 
 const load = (): Partial<ScratchpadState> => {
   try {
