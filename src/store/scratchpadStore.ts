@@ -1,5 +1,17 @@
 import { create } from 'zustand'
+import localforage from 'localforage'
 
+// ── Configuração do IndexedDB ─────────────────────────────────────────────
+localforage.config({
+  name: 'PainelIdeias',
+  storeName: 'scratchpad',
+  description: 'Notas e janelas do Painel de Ideias',
+})
+
+const STORAGE_KEY = 'scratchpad_v3'
+const LEGACY_KEY  = 'scratchpad_v2'
+
+// ── Interfaces ────────────────────────────────────────────────────────────
 export interface Sheet {
   id: string
   title: string
@@ -18,6 +30,11 @@ export interface WindowState {
   zIndex: number
 }
 
+interface PersistedData {
+  sheets: Sheet[]
+  windows: WindowState[]
+}
+
 interface ScratchpadState {
   sheets: Sheet[]
   windows: WindowState[]
@@ -25,8 +42,9 @@ interface ScratchpadState {
   isSandboxOpen: boolean
   sandboxCode: string
   activeSheetId: string | null
-  setActiveSheet: (id: string | null) => void
+  isHydrated: boolean
 
+  setActiveSheet: (id: string | null) => void
   createSheet: () => void
   deleteSheet: (id: string) => void
   openWindow: (sheetId: string) => void
@@ -42,52 +60,9 @@ interface ScratchpadState {
   closeSandbox: () => void
 }
 
-const generateId = () => `sheet_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
-
-const STORAGE_KEY = 'scratchpad_v2'
-
-const load = (): Partial<ScratchpadState> => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return {}
-    const parsed = JSON.parse(raw)
-    // Valida estrutura mínima — se inválida, descarta silenciosamente
-    if (
-      typeof parsed !== 'object' ||
-      !Array.isArray(parsed.sheets) ||
-      !Array.isArray(parsed.windows)
-    ) {
-      localStorage.removeItem(STORAGE_KEY)
-      return {}
-    }
-    return parsed
-  } catch {
-    localStorage.removeItem(STORAGE_KEY)
-    return {}
-  }
-}
-
-// Salva imediatamente para operações estruturais (criar, deletar, mover janela)
-const saveNow = (sheets: Sheet[], windows: WindowState[]) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ sheets, windows }))
-  } catch {}
-}
-
-// Debounce de 400ms para conteúdo — evita write a cada keystroke
-let saveTimer: ReturnType<typeof setTimeout> | null = null
-const saveDebounced = (sheets: Sheet[], windows: WindowState[]) => {
-  if (saveTimer) clearTimeout(saveTimer)
-  saveTimer = setTimeout(() => saveNow(sheets, windows), 400)
-}
-
-const defaultSheet: Sheet = {
-  id: generateId(),
-  title: 'Nova folha',
-  content: '',
-  createdAt: Date.now(),
-  updatedAt: Date.now(),
-}
+// ── Helpers ───────────────────────────────────────────────────────────────
+const generateId = () =>
+  `sheet_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
 
 const makeWindow = (sheetId: string, z: number): WindowState => {
   const w = Math.min(680, window.innerWidth - 80)
@@ -104,31 +79,99 @@ const makeWindow = (sheetId: string, z: number): WindowState => {
   }
 }
 
-const persisted = load()
-const initSheets: Sheet[] = Array.isArray(persisted.sheets) && persisted.sheets.length
-  ? persisted.sheets
-  : [defaultSheet]
-const initWindows: WindowState[] = Array.isArray(persisted.windows) && persisted.windows.length
-  ? persisted.windows.map(w => ({ ...w, status: 'normal' as const }))
-  : [makeWindow(initSheets[0].id, 10)]
+const defaultSheet = (): Sheet => ({
+  id: generateId(),
+  title: 'Nova folha',
+  content: '',
+  createdAt: Date.now(),
+  updatedAt: Date.now(),
+})
+
+// ── Persistência assíncrona (IndexedDB via localforage) ───────────────────
+const saveNow = (sheets: Sheet[], windows: WindowState[]) => {
+  localforage.setItem<PersistedData>(STORAGE_KEY, { sheets, windows }).catch(() => {})
+}
+
+let saveTimer: ReturnType<typeof setTimeout> | null = null
+const saveDebounced = (sheets: Sheet[], windows: WindowState[]) => {
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = setTimeout(() => saveNow(sheets, windows), 400)
+}
+
+// ── Migração: localStorage → IndexedDB ───────────────────────────────────
+// Roda uma única vez na vida do browser. Se encontrar dados válidos no
+// localStorage antigo, move para o IndexedDB e apaga a chave legacy.
+export const migrateFromLocalStorage = async (): Promise<PersistedData | null> => {
+  try {
+    const raw = localStorage.getItem(LEGACY_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (
+      typeof parsed !== 'object' ||
+      !Array.isArray(parsed.sheets) ||
+      !Array.isArray(parsed.windows) ||
+      parsed.sheets.length === 0
+    ) {
+      localStorage.removeItem(LEGACY_KEY)
+      return null
+    }
+    // Dados válidos encontrados — salva no IndexedDB e limpa localStorage
+    await localforage.setItem<PersistedData>(STORAGE_KEY, {
+      sheets: parsed.sheets,
+      windows: parsed.windows,
+    })
+    localStorage.removeItem(LEGACY_KEY)
+    console.info('[PainelIdeias] Migração localStorage → IndexedDB concluída.')
+    return { sheets: parsed.sheets, windows: parsed.windows }
+  } catch {
+    return null
+  }
+}
+
+// ── Carregamento inicial (assíncrono) ─────────────────────────────────────
+// Retorna os dados do IndexedDB, ou tenta migrar do localStorage,
+// ou retorna estado inicial limpo.
+export const loadFromStorage = async (): Promise<PersistedData> => {
+  try {
+    const stored = await localforage.getItem<PersistedData>(STORAGE_KEY)
+    if (
+      stored &&
+      Array.isArray(stored.sheets) &&
+      Array.isArray(stored.windows) &&
+      stored.sheets.length > 0
+    ) {
+      return stored
+    }
+    // IndexedDB vazio — tenta migrar do localStorage
+    const migrated = await migrateFromLocalStorage()
+    if (migrated) return migrated
+  } catch {}
+
+  // Estado inicial limpo
+  const sheet = defaultSheet()
+  return {
+    sheets: [sheet],
+    windows: [makeWindow(sheet.id, 10)],
+  }
+}
+
+// ── Store ─────────────────────────────────────────────────────────────────
+const sheet0 = defaultSheet()
 
 export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
-  sheets: initSheets,
-  windows: initWindows,
+  // Estado inicial mínimo — será substituído pelo hydrate() no main.tsx
+  sheets:  [sheet0],
+  windows: [makeWindow(sheet0.id, 10)],
   topZ: 10,
   isSandboxOpen: false,
   sandboxCode: '',
   activeSheetId: null,
+  isHydrated: false,
+
   setActiveSheet: (id) => set({ activeSheetId: id }),
 
   createSheet: () => {
-    const sheet: Sheet = {
-      id: generateId(),
-      title: 'Nova folha',
-      content: '',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    }
+    const sheet: Sheet = defaultSheet()
     const topZ = get().topZ + 1
     const win = makeWindow(sheet.id, topZ)
     const sheets = [...get().sheets, sheet]
@@ -141,13 +184,7 @@ export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
     let sheets = get().sheets.filter(s => s.id !== id)
     let windows = get().windows.filter(w => w.sheetId !== id)
     if (sheets.length === 0) {
-      const sheet: Sheet = {
-        id: generateId(),
-        title: 'Nova folha',
-        content: '',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      }
+      const sheet = defaultSheet()
       sheets = [sheet]
       windows = [makeWindow(sheet.id, get().topZ + 1)]
     }
@@ -157,10 +194,7 @@ export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
 
   openWindow: (sheetId) => {
     const existing = get().windows.find(w => w.sheetId === sheetId)
-    if (existing) {
-      get().restoreWindow(sheetId)
-      return
-    }
+    if (existing) { get().restoreWindow(sheetId); return }
     const topZ = get().topZ + 1
     const win = makeWindow(sheetId, topZ)
     const windows = [...get().windows, win]
@@ -216,7 +250,7 @@ export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
       w.sheetId === sheetId ? { ...w, zIndex: topZ } : w
     )
     set({ windows, topZ })
-    // focusWindow não persiste — só altera zIndex em memória
+    // Não persiste — só zIndex em memória
   },
 
   updateSheetContent: (id, content) => {
@@ -224,7 +258,6 @@ export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
       s.id === id ? { ...s, content, updatedAt: Date.now() } : s
     )
     set({ sheets })
-    // Debounced: não escreve no localStorage a cada tecla
     saveDebounced(sheets, get().windows)
   },
 
