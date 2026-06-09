@@ -54,7 +54,7 @@ export const TipTapEditor = ({ sheetId, content }: { sheetId: string, content: s
 
   useEffect(() => {
     if (editor && content !== editor.getHTML()) {
-      editor.commands.setContent(content, false)
+      editor.commands.setContent(content)
     }
   }, [content, editor])
 

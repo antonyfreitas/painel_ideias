@@ -24,6 +24,8 @@ interface ScratchpadState {
   topZ: number
   isSandboxOpen: boolean
   sandboxCode: string
+  activeSheetId: string | null;
+  setActiveSheet: (id: string | null) => void;
 
   createSheet: () => void
   deleteSheet: (id: string) => void
@@ -90,6 +92,8 @@ export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
   topZ: 10,
   isSandboxOpen: false,
   sandboxCode: '',
+  activeSheetId: null,
+  setActiveSheet: (id) => set({ activeSheetId: id }),
 
   createSheet: () => {
     const sheet: Sheet = {

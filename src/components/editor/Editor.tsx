@@ -17,7 +17,7 @@ export function Editor() {
         class: 'prose-custom focus:outline-none w-full h-full min-h-[500px]',
       },
     },
-    onUpdate: ({ editor }) => {
+    onUpdate: () => {
       // Futuramente, é aqui que vamos salvar o conteúdo no localStorage (Zustand)
       // const html = editor.getHTML();
     }
