@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { motion, useMotionValue, useSpring, useTransform, MotionValue } from 'framer-motion'
+import { motion, useMotionValue, useSpring, useTransform, MotionValue, AnimatePresence } from 'framer-motion'
 import { useScratchpadStore } from '../../store/scratchpadStore'
 import { Plus, Code } from 'lucide-react'
 
@@ -10,11 +10,10 @@ const MAGNIFY_RANGE = 100
 const DockIcon = ({
   label,
   color,
-  textColor,
   onClick,
   mouseX,
   children,
-  active = false,
+  active,
 }: {
   label: string
   color: string
@@ -141,7 +140,6 @@ const SheetDockIcon = ({
     <DockIcon
       label={sheet.title || 'Nova folha'}
       color={bg}
-      textColor={text}
       onClick={handleClick}
       mouseX={mouseX}
       active={isActive}
@@ -174,7 +172,6 @@ export const Dock = () => {
         onMouseLeave={() => mouseX.set(999)}
         className="flex items-end gap-1.5 px-3 pb-2 pt-2.5 rounded-2xl"
         style={{
-          // Mais branco, menos transparente
           background: 'rgba(255,255,255,0.78)',
           backdropFilter: 'blur(32px) saturate(1.6)',
           WebkitBackdropFilter: 'blur(32px) saturate(1.6)',
