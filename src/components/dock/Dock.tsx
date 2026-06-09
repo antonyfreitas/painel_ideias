@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { motion, AnimatePresence, useMotionValue, useTransform, useSpring } from 'framer-motion'
+import { motion, useMotionValue, useSpring, useTransform, MotionValue } from 'framer-motion'
 import { useScratchpadStore } from '../../store/scratchpadStore'
 import { Plus, Code } from 'lucide-react'
 
@@ -18,9 +18,8 @@ const DockIcon = ({
 }: {
   label: string
   color: string
-  textColor?: string
   onClick: () => void
-  mouseX: ReturnType<typeof useMotionValue>
+  mouseX: MotionValue<number>
   children: React.ReactNode
   active?: boolean
 }) => {
@@ -113,7 +112,7 @@ const SheetDockIcon = ({
   mouseX,
 }: {
   sheetId: string
-  mouseX: ReturnType<typeof useMotionValue>
+  mouseX: MotionValue<number>
 }) => {
   const { sheets, windows, restoreWindow, focusWindow } = useScratchpadStore()
   const sheet = sheets.find(s => s.id === sheetId)
