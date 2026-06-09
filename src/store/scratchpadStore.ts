@@ -24,8 +24,8 @@ interface ScratchpadState {
   topZ: number
   isSandboxOpen: boolean
   sandboxCode: string
-  activeSheetId: string | null;
-  setActiveSheet: (id: string | null) => void;
+  activeSheetId: string | null
+  setActiveSheet: (id: string | null) => void
 
   createSheet: () => void
   deleteSheet: (id: string) => void
@@ -44,17 +44,42 @@ interface ScratchpadState {
 
 const generateId = () => `sheet_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
 
+const STORAGE_KEY = 'scratchpad_v2'
+const STORAGE_VERSION = 2
+
 const load = (): Partial<ScratchpadState> => {
   try {
-    const raw = localStorage.getItem('scratchpad_v2')
-    return raw ? JSON.parse(raw) : {}
-  } catch { return {} }
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    // Valida estrutura mínima — se inválida, descarta silenciosamente
+    if (
+      typeof parsed !== 'object' ||
+      !Array.isArray(parsed.sheets) ||
+      !Array.isArray(parsed.windows)
+    ) {
+      localStorage.removeItem(STORAGE_KEY)
+      return {}
+    }
+    return parsed
+  } catch {
+    localStorage.removeItem(STORAGE_KEY)
+    return {}
+  }
 }
 
-const save = (sheets: Sheet[], windows: WindowState[]) => {
+// Salva imediatamente para operações estruturais (criar, deletar, mover janela)
+const saveNow = (sheets: Sheet[], windows: WindowState[]) => {
   try {
-    localStorage.setItem('scratchpad_v2', JSON.stringify({ sheets, windows }))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ sheets, windows }))
   } catch {}
+}
+
+// Debounce de 400ms para conteúdo — evita write a cada keystroke
+let saveTimer: ReturnType<typeof setTimeout> | null = null
+const saveDebounced = (sheets: Sheet[], windows: WindowState[]) => {
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = setTimeout(() => saveNow(sheets, windows), 400)
 }
 
 const defaultSheet: Sheet = {
@@ -81,8 +106,10 @@ const makeWindow = (sheetId: string, z: number): WindowState => {
 }
 
 const persisted = load()
-const initSheets: Sheet[] = persisted.sheets?.length ? persisted.sheets : [defaultSheet]
-const initWindows: WindowState[] = persisted.windows?.length
+const initSheets: Sheet[] = Array.isArray(persisted.sheets) && persisted.sheets.length
+  ? persisted.sheets
+  : [defaultSheet]
+const initWindows: WindowState[] = Array.isArray(persisted.windows) && persisted.windows.length
   ? persisted.windows.map(w => ({ ...w, status: 'normal' as const }))
   : [makeWindow(initSheets[0].id, 10)]
 
@@ -108,19 +135,25 @@ export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
     const sheets = [...get().sheets, sheet]
     const windows = [...get().windows, win]
     set({ sheets, windows, topZ })
-    save(sheets, windows)
+    saveNow(sheets, windows)
   },
 
   deleteSheet: (id) => {
-    const sheets = get().sheets.filter(s => s.id !== id)
-    const windows = get().windows.filter(w => w.sheetId !== id)
+    let sheets = get().sheets.filter(s => s.id !== id)
+    let windows = get().windows.filter(w => w.sheetId !== id)
     if (sheets.length === 0) {
-      const sheet = { id: generateId(), title: 'Nova folha', content: '', createdAt: Date.now(), updatedAt: Date.now() }
-      sheets.push(sheet)
-      windows.push(makeWindow(sheet.id, get().topZ + 1))
+      const sheet: Sheet = {
+        id: generateId(),
+        title: 'Nova folha',
+        content: '',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      }
+      sheets = [sheet]
+      windows = [makeWindow(sheet.id, get().topZ + 1)]
     }
     set({ sheets, windows })
-    save(sheets, windows)
+    saveNow(sheets, windows)
   },
 
   openWindow: (sheetId) => {
@@ -133,13 +166,13 @@ export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
     const win = makeWindow(sheetId, topZ)
     const windows = [...get().windows, win]
     set({ windows, topZ })
-    save(get().sheets, windows)
+    saveNow(get().sheets, windows)
   },
 
   closeWindow: (sheetId) => {
     const windows = get().windows.filter(w => w.sheetId !== sheetId)
     set({ windows })
-    save(get().sheets, windows)
+    saveNow(get().sheets, windows)
   },
 
   minimizeWindow: (sheetId) => {
@@ -147,7 +180,7 @@ export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
       w.sheetId === sheetId ? { ...w, status: 'minimized' as const } : w
     )
     set({ windows })
-    save(get().sheets, windows)
+    saveNow(get().sheets, windows)
   },
 
   restoreWindow: (sheetId) => {
@@ -156,7 +189,7 @@ export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
       w.sheetId === sheetId ? { ...w, status: 'normal' as const, zIndex: topZ } : w
     )
     set({ windows, topZ })
-    save(get().sheets, windows)
+    saveNow(get().sheets, windows)
   },
 
   maximizeWindow: (sheetId) => {
@@ -167,7 +200,7 @@ export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
       w.sheetId === sheetId ? { ...w, status: next as WindowState['status'] } : w
     )
     set({ windows })
-    save(get().sheets, windows)
+    saveNow(get().sheets, windows)
   },
 
   updateWindowBounds: (sheetId, bounds) => {
@@ -175,7 +208,7 @@ export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
       w.sheetId === sheetId ? { ...w, ...bounds } : w
     )
     set({ windows })
-    save(get().sheets, windows)
+    saveNow(get().sheets, windows)
   },
 
   focusWindow: (sheetId) => {
@@ -184,6 +217,7 @@ export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
       w.sheetId === sheetId ? { ...w, zIndex: topZ } : w
     )
     set({ windows, topZ })
+    // focusWindow não persiste — só altera zIndex em memória
   },
 
   updateSheetContent: (id, content) => {
@@ -191,17 +225,16 @@ export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
       s.id === id ? { ...s, content, updatedAt: Date.now() } : s
     )
     set({ sheets })
-    save(sheets, get().windows)
+    // Debounced: não escreve no localStorage a cada tecla
+    saveDebounced(sheets, get().windows)
   },
-
-  
 
   updateSheetTitle: (id, title) => {
     const sheets = get().sheets.map(s =>
       s.id === id ? { ...s, title, updatedAt: Date.now() } : s
     )
     set({ sheets })
-    save(sheets, get().windows)
+    saveDebounced(sheets, get().windows)
   },
 
   openSandbox: (code) => set({ isSandboxOpen: true, sandboxCode: code }),
