@@ -30,6 +30,7 @@
     "localforage": "^1.10.0",
     "lowlight": "^3.3.0",
     "lucide-react": "^1.17.0",
+    "marked": "^18.0.5",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-rnd": "^10.5.3",

@@ -8,12 +8,7 @@ const MAGNIFY_SIZE = 58
 const MAGNIFY_RANGE = 100
 
 const DockIcon = ({
-  label,
-  color,
-  onClick,
-  mouseX,
-  children,
-  active,
+  label, color, onClick, mouseX, children, active,
 }: {
   label: string
   color: string
@@ -48,7 +43,6 @@ const DockIcon = ({
       style={{ y }}
       className="relative flex flex-col items-center"
     >
-      {/* Tooltip */}
       <motion.div
         initial={{ opacity: 0, y: 4, scale: 0.9 }}
         whileHover={{ opacity: 1, y: 0, scale: 1 }}
@@ -90,29 +84,16 @@ const DockIcon = ({
         {children}
       </motion.button>
 
-      {/* Dot indicator */}
       <motion.div
         animate={{ opacity: active ? 1 : 0, scale: active ? 1 : 0.4 }}
         transition={{ duration: 0.18 }}
-        style={{
-          width: 3,
-          height: 3,
-          borderRadius: '50%',
-          background: 'rgba(0,0,0,0.28)',
-          marginTop: 4,
-        }}
+        style={{ width: 3, height: 3, borderRadius: '50%', background: 'rgba(0,0,0,0.28)', marginTop: 4 }}
       />
     </motion.div>
   )
 }
 
-const SheetDockIcon = ({
-  sheetId,
-  mouseX,
-}: {
-  sheetId: string
-  mouseX: MotionValue<number>
-}) => {
+const SheetDockIcon = ({ sheetId, mouseX }: { sheetId: string; mouseX: MotionValue<number> }) => {
   const { sheets, windows, restoreWindow, focusWindow } = useScratchpadStore()
   const sheet = sheets.find(s => s.id === sheetId)
   const win   = windows.find(w => w.sheetId === sheetId)
@@ -121,7 +102,6 @@ const SheetDockIcon = ({
   const isActive = win.status !== 'minimized'
   const initial  = (sheet.title || 'F').charAt(0).toUpperCase()
 
-  // Paleta neutra papel — muito sutil
   const palettes = [
     { bg: 'rgba(245,242,235,0.92)', text: 'rgba(0,0,0,0.45)' },
     { bg: 'rgba(235,241,248,0.92)', text: 'rgba(0,0,0,0.45)' },
@@ -131,31 +111,31 @@ const SheetDockIcon = ({
   ]
   const { bg, text } = palettes[sheets.findIndex(s => s.id === sheetId) % palettes.length]
 
-  const handleClick = () => {
-    if (win.status === 'minimized') restoreWindow(sheetId)
-    else focusWindow(sheetId)
-  }
-
   return (
     <DockIcon
       label={sheet.title || 'Nova folha'}
       color={bg}
-      onClick={handleClick}
+      onClick={() => win.status === 'minimized' ? restoreWindow(sheetId) : focusWindow(sheetId)}
       mouseX={mouseX}
       active={isActive}
     >
-      <span style={{
-        fontFamily: 'Lora, serif',
-        fontSize: '1.1rem',
-        color: text,
-        fontWeight: 500,
-        userSelect: 'none',
-      }}>
+      <span style={{ fontFamily: 'Lora, serif', fontSize: '1.1rem', color: text, fontWeight: 500, userSelect: 'none' }}>
         {initial}
       </span>
     </DockIcon>
   )
 }
+
+const Divider = () => (
+  <div style={{
+    width: 1, height: 28,
+    background: 'rgba(0,0,0,0.08)',
+    borderRadius: 1,
+    alignSelf: 'center',
+    margin: '0 3px 4px',
+    flexShrink: 0,
+  }} />
+)
 
 export const Dock = () => {
   const { windows, createSheet, openSandbox, isSandboxOpen } = useScratchpadStore()
@@ -184,7 +164,6 @@ export const Dock = () => {
           ].join(', '),
         }}
       >
-        {/* Sheet icons */}
         <AnimatePresence mode="popLayout">
           {openSheetIds.map(id => (
             <motion.div
@@ -199,37 +178,24 @@ export const Dock = () => {
           ))}
         </AnimatePresence>
 
-        {/* Separador */}
-        {openSheetIds.length > 0 && (
-          <div style={{
-            width: 1,
-            height: 28,
-            background: 'rgba(0,0,0,0.08)',
-            borderRadius: 1,
-            alignSelf: 'center',
-            margin: '0 3px 4px',
-            flexShrink: 0,
-          }} />
-        )}
+        {openSheetIds.length > 0 && <Divider />}
 
-        {/* Nova folha */}
         <DockIcon
           label="Nova folha"
           color="rgba(79,110,247,0.10)"
           onClick={createSheet}
           mouseX={mouseX}
-          active={false}
         >
           <Plus size={18} strokeWidth={2} style={{ color: 'rgba(79,110,247,0.75)' }} />
         </DockIcon>
 
-        {/* Sandbox */}
+        <Divider />
+
         <DockIcon
           label="Sandbox  ⌃↵"
           color={isSandboxOpen ? 'rgba(22,22,30,0.88)' : 'rgba(22,22,30,0.07)'}
           onClick={() => openSandbox('<h1>Sandbox</h1>')}
           mouseX={mouseX}
-          active={false}
         >
           <Code
             size={17}

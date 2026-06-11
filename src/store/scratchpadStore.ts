@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import localforage from 'localforage'
 
-// ── Configuração do IndexedDB ─────────────────────────────────────────────
+// ── IndexedDB config ──────────────────────────────────────────────────────
 localforage.config({
   name: 'PainelIdeias',
   storeName: 'scratchpad',
@@ -46,6 +46,7 @@ interface ScratchpadState {
 
   setActiveSheet: (id: string | null) => void
   createSheet: () => void
+  createSheetAt: (x: number, y: number, title: string, content: string) => void
   deleteSheet: (id: string) => void
   openWindow: (sheetId: string) => void
   closeWindow: (sheetId: string) => void
@@ -64,14 +65,14 @@ interface ScratchpadState {
 const generateId = () =>
   `sheet_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
 
-const makeWindow = (sheetId: string, z: number): WindowState => {
+const makeWindow = (sheetId: string, z: number, x?: number, y?: number): WindowState => {
   const w = Math.min(680, window.innerWidth - 80)
   const h = Math.min(520, window.innerHeight - 120)
   const offset = (z % 6) * 28
   return {
     sheetId,
-    x: Math.max(24, (window.innerWidth - w) / 2 + offset),
-    y: Math.max(24, (window.innerHeight - h) / 2 + offset - 40),
+    x: x ?? Math.max(24, (window.innerWidth - w) / 2 + offset),
+    y: y ?? Math.max(24, (window.innerHeight - h) / 2 + offset - 40),
     width: w,
     height: h,
     status: 'normal',
@@ -87,7 +88,7 @@ const defaultSheet = (): Sheet => ({
   updatedAt: Date.now(),
 })
 
-// ── Persistência assíncrona (IndexedDB via localforage) ───────────────────
+// ── Persistência ──────────────────────────────────────────────────────────
 const saveNow = (sheets: Sheet[], windows: WindowState[]) => {
   localforage.setItem<PersistedData>(STORAGE_KEY, { sheets, windows }).catch(() => {})
 }
@@ -98,9 +99,7 @@ const saveDebounced = (sheets: Sheet[], windows: WindowState[]) => {
   saveTimer = setTimeout(() => saveNow(sheets, windows), 400)
 }
 
-// ── Migração: localStorage → IndexedDB ───────────────────────────────────
-// Roda uma única vez na vida do browser. Se encontrar dados válidos no
-// localStorage antigo, move para o IndexedDB e apaga a chave legacy.
+// ── Migração localStorage → IndexedDB ────────────────────────────────────
 export const migrateFromLocalStorage = async (): Promise<PersistedData | null> => {
   try {
     const raw = localStorage.getItem(LEGACY_KEY)
@@ -115,7 +114,6 @@ export const migrateFromLocalStorage = async (): Promise<PersistedData | null> =
       localStorage.removeItem(LEGACY_KEY)
       return null
     }
-    // Dados válidos encontrados — salva no IndexedDB e limpa localStorage
     await localforage.setItem<PersistedData>(STORAGE_KEY, {
       sheets: parsed.sheets,
       windows: parsed.windows,
@@ -128,9 +126,7 @@ export const migrateFromLocalStorage = async (): Promise<PersistedData | null> =
   }
 }
 
-// ── Carregamento inicial (assíncrono) ─────────────────────────────────────
-// Retorna os dados do IndexedDB, ou tenta migrar do localStorage,
-// ou retorna estado inicial limpo.
+// ── Carregamento inicial ──────────────────────────────────────────────────
 export const loadFromStorage = async (): Promise<PersistedData> => {
   try {
     const stored = await localforage.getItem<PersistedData>(STORAGE_KEY)
@@ -142,24 +138,18 @@ export const loadFromStorage = async (): Promise<PersistedData> => {
     ) {
       return stored
     }
-    // IndexedDB vazio — tenta migrar do localStorage
     const migrated = await migrateFromLocalStorage()
     if (migrated) return migrated
   } catch {}
 
-  // Estado inicial limpo
   const sheet = defaultSheet()
-  return {
-    sheets: [sheet],
-    windows: [makeWindow(sheet.id, 10)],
-  }
+  return { sheets: [sheet], windows: [makeWindow(sheet.id, 10)] }
 }
 
 // ── Store ─────────────────────────────────────────────────────────────────
 const sheet0 = defaultSheet()
 
 export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
-  // Estado inicial mínimo — será substituído pelo hydrate() no main.tsx
   sheets:  [sheet0],
   windows: [makeWindow(sheet0.id, 10)],
   topZ: 10,
@@ -171,9 +161,31 @@ export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
   setActiveSheet: (id) => set({ activeSheetId: id }),
 
   createSheet: () => {
-    const sheet: Sheet = defaultSheet()
+    const sheet = defaultSheet()
     const topZ = get().topZ + 1
     const win = makeWindow(sheet.id, topZ)
+    const sheets = [...get().sheets, sheet]
+    const windows = [...get().windows, win]
+    set({ sheets, windows, topZ })
+    saveNow(sheets, windows)
+  },
+
+  createSheetAt: (x, y, title, content) => {
+    const sheet: Sheet = {
+      id: generateId(),
+      title,
+      content,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }
+    const topZ = get().topZ + 1
+    // Posiciona a janela centrada no ponto de drop, dentro dos limites
+    const w = Math.min(680, window.innerWidth - 80)
+    const h = Math.min(520, window.innerHeight - 120)
+    const win = makeWindow(sheet.id, topZ,
+      Math.max(0, Math.min(x - w / 2, window.innerWidth - w)),
+      Math.max(0, Math.min(y - 20, window.innerHeight - h)),
+    )
     const sheets = [...get().sheets, sheet]
     const windows = [...get().windows, win]
     set({ sheets, windows, topZ })
@@ -250,7 +262,6 @@ export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
       w.sheetId === sheetId ? { ...w, zIndex: topZ } : w
     )
     set({ windows, topZ })
-    // Não persiste — só zIndex em memória
   },
 
   updateSheetContent: (id, content) => {
